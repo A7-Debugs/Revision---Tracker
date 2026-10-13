@@ -4,9 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
 
-// GitHub Pages serves this project from /<repo-name>/ (case-sensitive), not the domain root.
+// GitHub Pages serves this project from /Revision---Tracker/ (the repo name, case-sensitive), not the domain root.
 // HashRouter keeps client-side routes working under that subpath without server rewrites.
-const BASE = process.env.GITHUB_PAGES === 'true' ? '/Revision-tracker/' : '/'
+const BASE = process.env.GITHUB_PAGES === 'true' ? '/Revision---Tracker/' : '/'
 
 // https://vite.dev/config/
 export default defineConfig({
