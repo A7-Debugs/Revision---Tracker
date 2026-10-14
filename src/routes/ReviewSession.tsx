@@ -9,7 +9,7 @@ import { rateSection, toggleWeak } from '@/lib/actions';
 import { reviewQueue, pct } from '@/lib/analytics';
 import { cardRetention, formatInterval, previewIntervals, RATING_HINT, RATING_LABEL } from '@/lib/srs';
 import type { Rating } from '@/lib/types';
-import { CHAPTER_BY_NUMBER, hubUrl, SECTION_BY_ID } from '@/data/syllabus';
+import { examOf, hubUrl, SECTION_BY_ID } from '@/data/syllabus';
 import { cn } from '@/lib/cn';
 
 export default function ReviewSession() {
@@ -60,9 +60,10 @@ function Session({ d }: { d: AppData }) {
   }
 
   const sec = SECTION_BY_ID.get(ids[idx])!;
-  const ch = CHAPTER_BY_NUMBER.get(sec.chapter)!;
-  const card = d.cardMap.get(sec.id) ?? null;
-  const ctx = { today: d.today, examDate: d.settings.examDate, desiredRetention: d.settings.desiredRetention };
+  const exam = examOf(sec.exam);
+  const ch = exam.chapterByNumber.get(sec.chapter)!;
+  const card = d.allCards.find((c) => c.id === sec.id) ?? null;
+  const ctx = { today: d.today, examDate: d.settings.exams[sec.exam].examDate, desiredRetention: d.settings.desiredRetention };
   const preview = previewIntervals(card, ctx);
   const quiz = ch.resources.find((r) => r.label.startsWith('Summary'));
 
@@ -72,7 +73,7 @@ function Session({ d }: { d: AppData }) {
     try {
       await rateSection(sec.id, g, d.settings);
       setTally((t) => ({ ...t, [g]: t[g] + 1 }));
-      if (g === 1) toast(`${sec.id} back in ${formatInterval(preview[1])} — re-read the weak bits now`, 'info');
+      if (g === 1) toast(`${sec.code} back in ${formatInterval(preview[1])} — re-read the weak bits now`, 'info');
       setIdx((i) => i + 1);
       setRevealed(false);
     } finally {
@@ -99,10 +100,10 @@ function Session({ d }: { d: AppData }) {
       <main className="flex-1 mx-auto w-full max-w-lg px-4 py-5 space-y-4 animate-fade-in" key={sec.id}>
         <div>
           <p className="text-xs text-base-400">
-            Ch {ch.number} · {ch.title}
+            {exam.code} · Ch {ch.number} · {ch.title}
           </p>
           <h1 className="text-2xl font-bold text-base-50 mt-1">
-            <span className="text-base-500 mr-2 tabular-nums">{sec.id}</span>
+            <span className="text-base-500 mr-2 tabular-nums">{sec.code}</span>
             {sec.title}
           </h1>
           <div className="flex gap-1.5 mt-2">
@@ -115,7 +116,7 @@ function Session({ d }: { d: AppData }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-base-500 mb-2">{revealed ? 'Check each point' : 'Recall everything you can about…'}</p>
           <div className="space-y-1">
             {sec.subtopics.map((t) => {
-              const weak = d.stateMap.get(t.id)?.weak;
+              const weak = d.allStates.find((x) => x.id === t.id)?.weak;
               return (
                 <div key={t.id} className="flex items-center gap-2 py-1">
                   <span className="text-xs text-base-500 tabular-nums w-12 shrink-0">{t.code}</span>
@@ -129,7 +130,7 @@ function Session({ d }: { d: AppData }) {
                       >
                         <Flag size={13} />
                       </button>
-                      <a href={hubUrl(t.id)} target="_blank" rel="noreferrer" className="h-7 w-7 rounded-md flex items-center justify-center text-base-300" aria-label="Open on Study Hub">
+                      <a href={hubUrl(exam, t.slug)} target="_blank" rel="noreferrer" className="h-7 w-7 rounded-md flex items-center justify-center text-base-300" aria-label="Open on Study Hub">
                         <ExternalLink size={14} />
                       </a>
                     </>

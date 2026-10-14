@@ -10,6 +10,7 @@ import { useData } from '@/lib/useData';
 import { pct, reviewForecast, reviewQueue, reviewsDoneToday, shortDate } from '@/lib/analytics';
 import { RATING_LABEL } from '@/lib/srs';
 import { SECTION_BY_ID } from '@/data/syllabus';
+import { ExamSwitch } from '@/components/study/ExamSwitch';
 
 export default function Review() {
   const d = useData();
@@ -21,7 +22,7 @@ export default function Review() {
 
   return (
     <div className="animate-fade-in">
-      <TopBar title="Review" />
+      <TopBar title={`${d.exam.code} review`} right={<ExamSwitch d={d} />} />
       <div className="px-4 py-3 space-y-4">
         <Card>
           <CardContent className="pt-4">
@@ -58,7 +59,7 @@ export default function Review() {
               const sec = SECTION_BY_ID.get(q.sectionId)!;
               return (
                 <div key={q.sectionId} className="flex items-center gap-3 rounded-xl bg-base-900 border border-base-800 px-3 py-2.5">
-                  <span className="text-xs text-base-400 tabular-nums w-9 shrink-0">{sec.id}</span>
+                  <span className="text-xs text-base-400 tabular-nums w-9 shrink-0">{sec.code}</span>
                   <span className="text-sm text-base-100 flex-1 truncate">{sec.title}</span>
                   {q.first ? (
                     <Badge variant="info">First</Badge>
@@ -92,7 +93,7 @@ export default function Review() {
                 <div key={r.id} className="flex items-center gap-2 text-sm">
                   <span className="text-base-500 text-xs w-14 shrink-0">{shortDate(r.date)}</span>
                   <span className="text-base-200 flex-1 truncate">
-                    {r.cardId} {SECTION_BY_ID.get(r.cardId)?.title}
+                    {SECTION_BY_ID.get(r.cardId)?.code} {SECTION_BY_ID.get(r.cardId)?.title}
                   </span>
                   <span className={r.rating === 1 ? 'text-danger' : r.rating === 2 ? 'text-warn' : 'text-accent'}>{RATING_LABEL[r.rating]}</span>
                 </div>

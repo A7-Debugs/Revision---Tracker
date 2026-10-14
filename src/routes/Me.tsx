@@ -13,11 +13,12 @@ import { useData, type AppData } from '@/lib/useData';
 import { deleteMock, deleteSession, saveMock, updateSettings } from '@/lib/actions';
 import { exportJSON, importJSON, wipeAllData } from '@/lib/backup';
 import { ensureSettings } from '@/lib/db';
-import { currentPhase, effectiveLevel, LEVELS, levelDef, minutesByDate, overdueCount, recommendLevel } from '@/lib/plan';
+import { activeExam, currentPhase, effectiveLevel, LEVELS, levelDef, minutesByDate, overdueCount, recommendLevel } from '@/lib/plan';
 import { fmt, pct, shortDate } from '@/lib/analytics';
 import { todayStr } from '@/lib/id';
 import { KIND_LABEL, type Level, type MockKind } from '@/lib/types';
-import { CHAPTERS, STUDY_HUB_BASE } from '@/data/syllabus';
+import { EXAMS, examOf, type ExamId } from '@/data/syllabus';
+import type { ExamPlan } from '@/lib/types';
 import { cn } from '@/lib/cn';
 
 const MOCK_LABEL: Record<MockKind, string> = {
@@ -47,7 +48,8 @@ export default function Me() {
 function LevelCard({ d }: { d: AppData }) {
   const toast = useToast();
   const s = d.settings;
-  const phase = currentPhase(s, d.today);
+  const active = activeExam(s, d.today);
+  const phase = currentPhase(s.exams[active], active, d.today);
   const eff = effectiveLevel(s, d.today);
   const rec = recommendLevel(s, minutesByDate(d.sessions), overdueCount(d.cards, d.today), d.today);
 
@@ -67,7 +69,7 @@ function LevelCard({ d }: { d: AppData }) {
         </div>
         {eff > s.level && (
           <p className="text-xs text-warn mt-1">
-            {phase.name} phase raises your floor to Level {phase.floor}. Your own level is {s.level}. Time to trade some gym sessions for revision.
+            {examOf(active).code} {phase.name} phase raises your floor to Level {phase.floor}. Your own level is {s.level}. Time to trade some gym sessions for revision.
           </p>
         )}
       </CardHeader>
@@ -132,7 +134,7 @@ function Mocks({ d }: { d: AppData }) {
           </Button>
         }
       >
-        Mocks & quizzes
+        {d.exam.code} mocks & quizzes
       </SectionTitle>
       {list.length === 0 ? (
         <p className="text-sm text-base-400 rounded-xl border border-dashed border-base-700 p-4 text-center">
@@ -160,12 +162,12 @@ function Mocks({ d }: { d: AppData }) {
           })}
         </div>
       )}
-      <MockDialog open={open} onOpenChange={setOpen} />
+      <MockDialog d={d} open={open} onOpenChange={setOpen} />
     </div>
   );
 }
 
-function MockDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+function MockDialog({ d, open, onOpenChange }: { d: AppData; open: boolean; onOpenChange: (v: boolean) => void }) {
   const toast = useToast();
   const [kind, setKind] = useState<MockKind>('chapter-quiz');
   const [chapter, setChapter] = useState('none');
@@ -179,7 +181,7 @@ function MockDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     const sc = Number(score);
     const mx = Number(max);
     if (!(mx > 0) || !(sc >= 0)) return;
-    await saveMock({ kind, chapter: chapter === 'none' ? null : Number(chapter), score: sc, maxScore: mx, date, title: title.trim(), notes: notes.trim() });
+    await saveMock({ exam: d.exam.id, kind, chapter: chapter === 'none' ? null : Number(chapter), score: sc, maxScore: mx, date, title: title.trim(), notes: notes.trim() });
     toast(`Saved — ${Math.round((sc / mx) * 100)}%`);
     setScore('');
     setTitle('');
@@ -188,7 +190,7 @@ function MockDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Log a result">
+    <Dialog open={open} onOpenChange={onOpenChange} title={`Log a ${d.exam.code} result`}>
       <div className="space-y-3">
         <Select
           value={kind}
@@ -201,7 +203,7 @@ function MockDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
         <Select
           value={chapter}
           onValueChange={setChapter}
-          options={[{ value: 'none', label: 'Whole syllabus / mixed' }, ...CHAPTERS.map((c) => ({ value: String(c.number), label: `${c.number}. ${c.title}` }))]}
+          options={[{ value: 'none', label: 'Whole syllabus / mixed' }, ...d.exam.chapters.map((c) => ({ value: String(c.number), label: `${c.number}. ${c.title}` }))]}
         />
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -268,19 +270,34 @@ function SettingsCard({ d }: { d: AppData }) {
         <CardTitle>Settings</CardTitle>
       </CardHeader>
       <CardContent className="pt-3 space-y-4">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs text-base-400 mb-1 block">Exam date</label>
-            <Input type="date" value={s.examDate} onChange={(e) => e.target.value && updateSettings({ examDate: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-xs text-base-400 mb-1 block">Finish learning by</label>
-            <Input type="date" value={s.learnBy} max={s.examDate} onChange={(e) => e.target.value && updateSettings({ learnBy: e.target.value })} />
-          </div>
-        </div>
-        <p className="text-[11px] text-base-500 -mt-2">
-          Exam {fmt(s.examDate)}. New content should be done by {fmt(s.learnBy)}, leaving the rest for question practice and mocks.
-        </p>
+        {EXAMS.map((e) => {
+          const plan = s.exams[e.id];
+          const set = (patch: Partial<ExamPlan>) => updateSettings({ exams: { ...s.exams, [e.id]: { ...plan, ...patch } } as Record<ExamId, ExamPlan> });
+          return (
+            <div key={e.id} className="space-y-2">
+              <p className="text-sm font-semibold text-base-100">
+                {e.code} · {e.name}
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[11px] text-base-400 mb-1 block">Start</label>
+                  <Input type="date" value={plan.startFrom} className="px-2 text-sm" onChange={(ev) => ev.target.value && set({ startFrom: ev.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-base-400 mb-1 block">Learn by</label>
+                  <Input type="date" value={plan.learnBy} className="px-2 text-sm" onChange={(ev) => ev.target.value && set({ learnBy: ev.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[11px] text-base-400 mb-1 block">Exam</label>
+                  <Input type="date" value={plan.examDate} className="px-2 text-sm" onChange={(ev) => ev.target.value && set({ examDate: ev.target.value })} />
+                </div>
+              </div>
+              <p className="text-[11px] text-base-500">
+                New content {fmt(plan.startFrom)} → {fmt(plan.learnBy)}, then question practice and mocks until the exam on {fmt(plan.examDate)}.
+              </p>
+            </div>
+          );
+        })}
 
         <div>
           <label className="text-xs text-base-400 mb-1.5 block">Usual days off (bigger targets)</label>
@@ -310,9 +327,11 @@ function SettingsCard({ d }: { d: AppData }) {
           />
         </div>
 
-        <a href={STUDY_HUB_BASE} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl bg-base-850 border border-base-700 px-3 py-2.5 text-sm text-base-200">
-          Open ACCA AA Study Hub <ExternalLink size={14} />
-        </a>
+        {EXAMS.filter((e) => e.hubBase).map((e) => (
+          <a key={e.id} href={e.hubBase} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl bg-base-850 border border-base-700 px-3 py-2.5 text-sm text-base-200">
+            Open ACCA {e.code} Study Hub <ExternalLink size={14} />
+          </a>
+        ))}
 
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" onClick={() => exportJSON()}>

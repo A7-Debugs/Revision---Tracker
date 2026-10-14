@@ -1,15 +1,20 @@
+import type { ExamId } from '@/data/syllabus';
+
+export type { ExamId };
+
 export type Rating = 1 | 2 | 3 | 4; // Again, Hard, Good, Easy
 
 /** Per-subtopic learning state. Static syllabus content lives in data/syllabus.ts. */
 export interface SubtopicState {
-  id: string; // Study Hub slug
+  id: string; // "<exam>:<slug>"
   learnedAt: string | null; // YYYY-MM-DD
   weak: boolean;
 }
 
 /** Spaced-repetition card. One per section — a section enters review once all its subtopics are learned. */
 export interface Card {
-  id: string; // section id, e.g. "2.4"
+  id: string; // section id, e.g. "aa:2.4"
+  exam: ExamId;
   chapter: number;
   stability: number; // days until recall probability falls to 90%
   difficulty: number; // 1..10
@@ -23,6 +28,7 @@ export interface Card {
 export interface ReviewLog {
   id: string;
   cardId: string;
+  exam: ExamId;
   chapter: number;
   date: string;
   ts: number;
@@ -47,6 +53,7 @@ export interface StudySession {
   date: string;
   minutes: number;
   kind: StudyKind;
+  exam: ExamId;
   chapter: number | null;
   note: string;
   createdAt: number;
@@ -58,6 +65,7 @@ export interface MockResult {
   id: string;
   date: string;
   kind: MockKind;
+  exam: ExamId;
   title: string;
   chapter: number | null;
   score: number;
@@ -68,10 +76,17 @@ export interface MockResult {
 
 export type Level = 1 | 2 | 3 | 4 | 5;
 
-export interface Settings {
-  id: 'main';
+export interface ExamPlan {
   examDate: string;
   learnBy: string; // date by which all new content should be covered
+  startFrom: string; // when new-content quotas begin for this exam
+}
+
+export interface Settings {
+  id: 'main';
+  exams: Record<ExamId, ExamPlan>;
+  /** Exam shown across the app. 'auto' = the next exam you'll sit. */
+  focus: ExamId | 'auto';
   daysOff: number[]; // 0 = Sunday … 6 = Saturday
   level: Level;
   levelSince: string;

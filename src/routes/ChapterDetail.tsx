@@ -12,22 +12,22 @@ import { setLearned, toggleWeak } from '@/lib/actions';
 import { chapterStats, fmt, pct } from '@/lib/analytics';
 import { cardRetention, examDayRetention, formatInterval } from '@/lib/srs';
 import { daysBetween } from '@/lib/id';
-import { CHAPTER_BY_NUMBER, hubUrl } from '@/data/syllabus';
+import { hubUrl } from '@/data/syllabus';
 import { cn } from '@/lib/cn';
 
 export default function ChapterDetail() {
   const { chapter } = useParams();
   const { hash } = useLocation();
   const d = useData();
-  const ch = CHAPTER_BY_NUMBER.get(Number(chapter));
+  const ch = d?.exam.chapterByNumber.get(Number(chapter));
 
   useEffect(() => {
     if (!d || !hash) return;
     document.getElementById(`sec-${hash.slice(1)}`)?.scrollIntoView({ block: 'start' });
   }, [d, hash]);
 
-  if (!ch) return <EmptyState icon={Brain} title="Chapter not found" />;
   if (!d) return null;
+  if (!ch) return <EmptyState icon={Brain} title="Chapter not found" />;
   const st = chapterStats(d).find((c) => c.number === ch.number)!;
 
   return (
@@ -49,7 +49,7 @@ export default function ChapterDetail() {
             ))}
           </div>
         )}
-        {ch.number === 1 && (
+        {d.exam.id === 'aa' && ch.number === 1 && ch.sections.length === 1 && (
           <p className="text-xs text-base-400 leading-relaxed">
             Chapter 1's subtopics weren't in the list, so it's tracked as a single item for now. Send them over and they'll be split out like the others.
           </p>
@@ -65,7 +65,7 @@ export default function ChapterDetail() {
               <CardContent className="pt-3.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[11px] text-base-500 tabular-nums">{sec.id}</p>
+                    <p className="text-[11px] text-base-500 tabular-nums">{sec.code}</p>
                     <p className="text-[15px] font-semibold text-base-50">{sec.title}</p>
                   </div>
                   {card ? (
@@ -82,7 +82,7 @@ export default function ChapterDetail() {
                   <p className="text-[11px] text-base-400 mt-1">
                     Recall now <span style={{ color: scoreColor(ret! * 100) }}>{pct(ret)}</span> · memory lasts ~{formatInterval(Math.round(card.stability))} · {card.reps} review
                     {card.reps === 1 ? '' : 's'}
-                    {card.lapses ? ` · ${card.lapses} lapse${card.lapses > 1 ? 's' : ''}` : ''} · exam day {pct(examDayRetention(card, d.settings.examDate))} if left
+                    {card.lapses ? ` · ${card.lapses} lapse${card.lapses > 1 ? 's' : ''}` : ''} · exam day {pct(examDayRetention(card, d.plan.examDate))} if left
                     {daysBetween(card.lastReview, d.today) > 0 ? ` · last ${daysBetween(card.lastReview, d.today)}d ago` : ' · reviewed today'}
                   </p>
                 )}
@@ -99,7 +99,7 @@ export default function ChapterDetail() {
                         >
                           {done && <Check size={14} strokeWidth={3} />}
                         </button>
-                        <a href={hubUrl(t.id)} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-sm text-base-100 truncate">
+                        <a href={hubUrl(d.exam, t.slug)} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-sm text-base-100 truncate">
                           <span className="text-base-500 tabular-nums mr-1.5">{t.code}</span>
                           {t.title}
                         </a>

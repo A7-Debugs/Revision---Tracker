@@ -1,6 +1,6 @@
-import type { Card, Level, Settings, StudySession, SubtopicState } from './types';
+import type { Card, ExamPlan, Level, Settings, StudySession, SubtopicState } from './types';
 import { addDays, daysBetween, weekday } from './id';
-import { SECTIONS, SUBTOPICS } from '@/data/syllabus';
+import { EXAMS, type Exam, type ExamId } from '@/data/syllabus';
 
 // ---------------------------------------------------------------------------------------------
 // Levels — daily study volume. You start low, prove consistency, then level up (same idea as the
@@ -29,7 +29,7 @@ export const levelDef = (l: Level) => LEVELS[l - 1];
 // Phases
 // ---------------------------------------------------------------------------------------------
 
-export type PhaseId = 'learn' | 'revise' | 'final' | 'exam' | 'done';
+export type PhaseId = 'upcoming' | 'learn' | 'revise' | 'final' | 'exam' | 'done';
 
 export interface Phase {
   id: PhaseId;
@@ -39,20 +39,34 @@ export interface Phase {
   newContent: boolean;
 }
 
-export function currentPhase(s: Settings, today: string): Phase {
-  const left = daysBetween(today, s.examDate);
+/** The exam you're working towards on `date`: the first (in sitting order) whose date hasn't passed. */
+export function activeExam(s: Settings, date: string): ExamId {
+  return (EXAMS.find((e) => s.exams[e.id].examDate >= date) ?? EXAMS[EXAMS.length - 1]).id;
+}
+
+/**
+ * Taxation's learning window is squeezed between AA and June, so it starts at a higher floor.
+ */
+const LEARN_FLOOR: Record<ExamId, Level> = { aa: 1, tx: 4 };
+
+export function currentPhase(plan: ExamPlan, exam: ExamId, today: string): Phase {
+  const left = daysBetween(today, plan.examDate);
   if (left < 0) return { id: 'done', name: 'Exam sat', focus: 'Well done. Log your result and rest.', floor: 1, newContent: false };
   if (left <= 3)
     return { id: 'exam', name: 'Exam week', focus: 'Light review of weakest sections only. Sleep, timing practice, no new material.', floor: 3, newContent: false };
   if (left <= 21)
     return { id: 'final', name: 'Final revision', focus: 'Full timed mocks, every due review, weakest chapters first. No new content.', floor: 5, newContent: false };
-  if (today > s.learnBy)
-    return { id: 'revise', name: 'Revision & practice', focus: 'Finish any stragglers, then question practice and Section B scenarios. Reviews come first.', floor: 4, newContent: true };
-  return { id: 'learn', name: 'Learn the syllabus', focus: 'Work through new subtopics in order. Do due reviews before new material.', floor: 1, newContent: true };
+  if (today > plan.learnBy)
+    return { id: 'revise', name: 'Revision & practice', focus: 'Finish any stragglers, then question practice and exam-style scenarios. Reviews come first.', floor: 4, newContent: true };
+  if (today < plan.startFrom)
+    return { id: 'upcoming', name: 'Not started', focus: `Starts ${new Date(`${plan.startFrom}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}. You can read ahead any time, but the main focus is the exam before it.`, floor: 1, newContent: false };
+  return { id: 'learn', name: 'Learn the syllabus', focus: 'Work through new subtopics in order. Do due reviews before new material.', floor: LEARN_FLOOR[exam], newContent: true };
 }
 
+/** Level that applies today: your chosen level, raised to the floor of the exam you're currently working towards. */
 export function effectiveLevel(s: Settings, today: string): Level {
-  return Math.max(s.level, currentPhase(s, today).floor) as Level;
+  const ex = activeExam(s, today);
+  return Math.max(s.level, currentPhase(s.exams[ex], ex, today).floor) as Level;
 }
 
 export const isDayOff = (s: Settings, date: string) => s.daysOff.includes(weekday(date));
@@ -213,41 +227,45 @@ export interface Pace {
   onTrack: boolean | null;
 }
 
-export function pace(s: Settings, states: SubtopicState[], today: string): Pace {
+export function pace(s: Settings, exam: Exam, states: SubtopicState[], today: string): Pace {
+  const plan = s.exams[exam.id];
   const learnedSet = new Set(states.filter((x) => x.learnedAt).map((x) => x.id));
-  const total = SUBTOPICS.length;
-  const learned = SUBTOPICS.filter((t) => learnedSet.has(t.id)).length;
+  const total = exam.subtopics.length;
+  const learned = exam.subtopics.filter((t) => learnedSet.has(t.id)).length;
   const remaining = total - learned;
-  const learnedToday = states.filter((x) => x.learnedAt === today).length;
+  const learnedToday = states.filter((x) => x.learnedAt === today && x.id.startsWith(`${exam.id}:`)).length;
   const remainingIncludingToday = remaining + learnedToday;
 
+  const from = today > plan.startFrom ? today : plan.startFrom;
   let weighted = 0;
-  for (let d = today; d <= s.learnBy; d = addDays(d, 1)) weighted += dayWeight(s, d);
+  for (let d = from; d <= plan.learnBy; d = addDays(d, 1)) weighted += dayWeight(s, d);
   const required = weighted > 0 ? remainingIncludingToday / weighted : remainingIncludingToday;
-  const phase = currentPhase(s, today);
+  const phase = currentPhase(plan, exam.id, today);
   const quotaToday = !phase.newContent || remainingIncludingToday === 0 ? 0 : Math.min(remainingIncludingToday, Math.max(2, Math.ceil(required * dayWeight(s, today))));
 
+  const started = plan.startFrom > s.startedAt ? plan.startFrom : s.startedAt;
   const since = addDays(today, -13);
-  const window = Math.min(14, daysBetween(s.startedAt, today) + 1);
-  const recent = states.filter((x) => x.learnedAt && x.learnedAt >= since).length;
+  const window = Math.min(14, daysBetween(started, today) + 1);
+  const recent = states.filter((x) => x.learnedAt && x.learnedAt >= since && x.learnedAt >= started).length;
   const recentRate = window > 0 ? recent / window : 0;
   const projectedFinish = remaining === 0 ? today : recentRate > 0 ? addDays(today, Math.ceil(remaining / recentRate)) : null;
-  const onTrack = remaining === 0 ? true : window < 5 ? null : projectedFinish !== null && projectedFinish <= s.learnBy;
+  const onTrack = remaining === 0 ? true : window < 5 ? null : projectedFinish !== null && projectedFinish <= plan.learnBy;
   return { total, learned, remaining, learnedToday, quotaToday, required, recentRate, projectedFinish, onTrack };
 }
 
 /** Next unlearned subtopics in syllabus order. */
-export function nextSubtopics(states: SubtopicState[], n: number) {
+export function nextSubtopics(exam: Exam, states: SubtopicState[], n: number) {
   const learned = new Set(states.filter((x) => x.learnedAt).map((x) => x.id));
-  return SUBTOPICS.filter((t) => !learned.has(t.id)).slice(0, n);
-}
-
-export function sectionProgress(sectionId: string, states: Map<string, SubtopicState>) {
-  const sec = SECTIONS.find((s) => s.id === sectionId)!;
-  const learned = sec.subtopics.filter((t) => states.get(t.id)?.learnedAt).length;
-  return { learned, total: sec.subtopics.length };
+  return exam.subtopics.filter((t) => !learned.has(t.id)).slice(0, n);
 }
 
 export function overdueCount(cards: Card[], today: string): number {
   return cards.filter((c) => c.due < today).length;
+}
+
+/** Weighted study days (days off count double) from `from` to `to`, inclusive. */
+export function weightedDays(s: Settings, from: string, to: string): number {
+  let n = 0;
+  for (let d = from; d <= to; d = addDays(d, 1)) n += dayWeight(s, d);
+  return n;
 }

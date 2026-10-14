@@ -7,11 +7,13 @@ import { useToast } from '@/components/ui/Toaster';
 import { Ring, SectionTitle } from '@/components/viz/Visuals';
 import { StudyTimer } from '@/components/study/StudyTimer';
 import { InsightRow } from '@/components/study/InsightRow';
+import { ExamSwitch } from '@/components/study/ExamSwitch';
+import { ExamTimeline } from '@/components/study/ExamTimeline';
 import { useData } from '@/lib/useData';
 import { setLearned } from '@/lib/actions';
 import { currentPhase, effectiveLevel, isDayOff, levelDef, minutesByDate, nextSubtopics, pace, targetMinutes } from '@/lib/plan';
 import { fmt, insights, overview, reviewQueue, reviewsDoneToday, round1 } from '@/lib/analytics';
-import { hubUrl, SECTION_BY_ID, SUBTOPIC_BY_ID, SUBTOPICS } from '@/data/syllabus';
+import { examOf, hubUrl, SECTION_BY_ID, SUBTOPIC_BY_ID } from '@/data/syllabus';
 import { cn } from '@/lib/cn';
 
 export default function Today() {
@@ -21,16 +23,16 @@ export default function Today() {
   if (!d) return null;
 
   const s = d.settings;
-  const phase = currentPhase(s, d.today);
+  const phase = currentPhase(d.plan, d.exam.id, d.today);
   const level = effectiveLevel(s, d.today);
   const target = targetMinutes(s, d.today);
   const minutes = minutesByDate(d.sessions).get(d.today) ?? 0;
   const ov = overview(d);
   const queue = reviewQueue(d);
   const doneReviews = reviewsDoneToday(d);
-  const p = pace(s, d.states, d.today);
-  const todaysLearned = SUBTOPICS.filter((t) => d.stateMap.get(t.id)?.learnedAt === d.today).map((t) => t.id);
-  const toLearn = nextSubtopics(d.states, Math.max(0, p.quotaToday - p.learnedToday));
+  const p = pace(s, d.exam, d.states, d.today);
+  const todaysLearned = d.exam.subtopics.filter((t) => d.stateMap.get(t.id)?.learnedAt === d.today).map((t) => t.id);
+  const toLearn = nextSubtopics(d.exam, d.states, Math.max(0, p.quotaToday - p.learnedToday));
   const tips = insights(d).slice(0, 2);
 
   const learn = async (id: string, code: string) => {
@@ -43,13 +45,16 @@ export default function Today() {
       <header className="flex items-end justify-between pt-2">
         <div>
           <p className="text-sm text-base-400">{fmt(d.today)}{isDayOff(s, d.today) ? ' · day off' : ''}</p>
-          <h1 className="text-2xl font-bold text-base-50">ACCA AA Revision</h1>
+          <h1 className="text-2xl font-bold text-base-50">ACCA {d.exam.code} Revision</h1>
         </div>
-        {ov.streak > 0 && (
-          <Badge variant="warn" className="text-sm px-2.5 py-1">
-            <Flame size={14} /> {ov.streak}
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {ov.streak > 0 && (
+            <Badge variant="warn" className="text-sm px-2.5 py-1">
+              <Flame size={14} /> {ov.streak}
+            </Badge>
+          )}
+          <ExamSwitch d={d} />
+        </div>
       </header>
 
       {/* Countdown + today's target */}
@@ -76,6 +81,8 @@ export default function Today() {
           </div>
         </CardContent>
       </Card>
+
+      <ExamTimeline d={d} />
 
       <Card>
         <CardContent className="pt-4">
@@ -111,6 +118,14 @@ export default function Today() {
         </CardContent>
       </Card>
 
+      {!d.exam.ready && (
+        <Card>
+          <CardContent className="pt-4 text-sm text-base-300 leading-relaxed">
+            The {d.exam.name} syllabus hasn't been added yet. Once its chapters and subtopics are in, this is where each day's new material will appear.
+          </CardContent>
+        </Card>
+      )}
+
       {/* New material */}
       {phase.newContent && p.remaining + p.learnedToday > 0 && (
         <Card>
@@ -122,7 +137,7 @@ export default function Today() {
           </CardHeader>
           <CardContent className="pt-2">
             <p className="text-xs text-base-400 mb-3">
-              {p.remaining} left · need ~{round1(p.required)}/work day to finish by {fmt(s.learnBy)}
+              {p.remaining} left · need ~{round1(p.required)}/work day to finish by {fmt(d.plan.learnBy)}
               {p.onTrack === false && <span className="text-danger font-medium"> · behind pace</span>}
               {p.onTrack === true && <span className="text-accent font-medium"> · on track</span>}
             </p>
@@ -176,6 +191,7 @@ function LearnRow({ id, done, onToggle }: { id: string; done: boolean; onToggle:
   const t = SUBTOPIC_BY_ID.get(id);
   if (!t) return null;
   const sec = SECTION_BY_ID.get(t.sectionId)!;
+  const exam = examOf(t.exam);
   return (
     <div className={cn('flex items-center gap-2 rounded-xl border px-2.5 py-2', done ? 'border-accent/30 bg-accent-bg' : 'border-base-800 bg-base-850')}>
       <button
@@ -194,7 +210,7 @@ function LearnRow({ id, done, onToggle }: { id: string; done: boolean; onToggle:
           Ch {t.chapter} · {sec.title}
         </p>
       </div>
-      <a href={hubUrl(t.id)} target="_blank" rel="noreferrer" className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg text-base-300 hover:bg-base-700" aria-label="Open on Study Hub">
+      <a href={hubUrl(exam, t.slug)} target="_blank" rel="noreferrer" className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg text-base-300 hover:bg-base-700" aria-label="Open on Study Hub">
         <ExternalLink size={16} />
       </a>
     </div>

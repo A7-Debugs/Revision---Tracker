@@ -9,7 +9,7 @@ import { Chips } from '@/components/viz/Visuals';
 import { logSession } from '@/lib/actions';
 import { todayStr } from '@/lib/id';
 import { KIND_LABEL, type StudyKind } from '@/lib/types';
-import { CHAPTERS } from '@/data/syllabus';
+import { useData } from '@/lib/useData';
 
 const KEY = 'revision-timer-start';
 
@@ -92,6 +92,7 @@ export function StudyTimer() {
 
 export function LogStudyDialog({ open, onOpenChange, minutes }: { open: boolean; onOpenChange: (v: boolean) => void; minutes: number | null }) {
   const toast = useToast();
+  const d = useData();
   const [mins, setMins] = useState<string>('');
   const [kind, setKind] = useState<StudyKind>('learn');
   const [chapter, setChapter] = useState('none');
@@ -108,8 +109,8 @@ export function LogStudyDialog({ open, onOpenChange, minutes }: { open: boolean;
 
   const save = async () => {
     const m = Number(mins);
-    if (!m || m <= 0) return;
-    await logSession({ date, minutes: Math.round(m), kind, chapter: chapter === 'none' ? null : Number(chapter), note: note.trim() });
+    if (!m || m <= 0 || !d) return;
+    await logSession({ exam: d.exam.id, date, minutes: Math.round(m), kind, chapter: chapter === 'none' ? null : Number(chapter), note: note.trim() });
     toast(`Logged ${Math.round(m)} min`);
     onOpenChange(false);
   };
@@ -129,11 +130,11 @@ export function LogStudyDialog({ open, onOpenChange, minutes }: { open: boolean;
           <Select value={kind} onValueChange={(v) => setKind(v as StudyKind)} options={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
         </div>
         <div>
-          <label className="text-xs text-base-400 mb-1 block">Chapter (optional)</label>
+          <label className="text-xs text-base-400 mb-1 block">{d?.exam.code ?? ''} chapter (optional)</label>
           <Select
             value={chapter}
             onValueChange={setChapter}
-            options={[{ value: 'none', label: 'Mixed / none' }, ...CHAPTERS.map((c) => ({ value: String(c.number), label: `${c.number}. ${c.title}` }))]}
+            options={[{ value: 'none', label: 'Mixed / none' }, ...(d?.exam.chapters ?? []).map((c) => ({ value: String(c.number), label: `${c.number}. ${c.title}` }))]}
           />
         </div>
         <div>

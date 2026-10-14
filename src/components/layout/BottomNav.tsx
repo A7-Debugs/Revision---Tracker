@@ -14,7 +14,13 @@ const ITEMS = [
 ];
 
 export function BottomNav() {
-  const due = useLiveQuery(() => db.cards.where('due').belowOrEqual(todayStr()).count(), []);
+  // Due reviews for exams you haven't sat yet.
+  const due = useLiveQuery(async () => {
+    const today = todayStr();
+    const s = await db.settings.get('main');
+    const cards = await db.cards.where('due').belowOrEqual(today).toArray();
+    return cards.filter((c) => !s || s.exams[c.exam].examDate >= today).length;
+  }, []);
   return (
     <nav className="sticky bottom-0 z-30 border-t border-base-800 bg-base-950/90 backdrop-blur-lg safe-bottom">
       <div className="mx-auto max-w-lg grid grid-cols-5">

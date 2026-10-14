@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { GoalBar, Heatmap, MiniBar, Ring, Stat, TrendBars, TrendLines } from '@/components/viz/Visuals';
 import { COLORS, scoreColor } from '@/components/viz/colors';
 import { InsightRow } from '@/components/study/InsightRow';
+import { ExamSwitch } from '@/components/study/ExamSwitch';
 import { useData } from '@/lib/useData';
 import {
   chapterStats,
@@ -32,7 +33,7 @@ export default function Stats() {
 
   return (
     <div className="animate-fade-in">
-      <TopBar title="Stats & insights" />
+      <TopBar title={`${d.exam.code} stats`} right={<ExamSwitch d={d} />} />
       <div className="px-4 py-3 space-y-4">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="w-full grid grid-cols-3">

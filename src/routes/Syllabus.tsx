@@ -7,7 +7,9 @@ import { MiniBar } from '@/components/viz/Visuals';
 import { scoreColor } from '@/components/viz/colors';
 import { useData } from '@/lib/useData';
 import { chapterStats, pct } from '@/lib/analytics';
-import { CHAPTERS, SUBTOPICS } from '@/data/syllabus';
+import { ExamSwitch } from '@/components/study/ExamSwitch';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { BookOpen } from 'lucide-react';
 
 export default function Syllabus() {
   const d = useData();
@@ -15,13 +17,24 @@ export default function Syllabus() {
   if (!d) return null;
   const stats = chapterStats(d);
   const query = q.trim().toLowerCase();
-  const hits = query ? SUBTOPICS.filter((t) => `${t.code} ${t.title}`.toLowerCase().includes(query)).slice(0, 40) : [];
+  const hits = query ? d.exam.subtopics.filter((t) => `${t.code} ${t.title}`.toLowerCase().includes(query)).slice(0, 40) : [];
   const learned = stats.reduce((a, c) => a + c.learned, 0);
 
   return (
     <div className="animate-fade-in">
-      <TopBar title="Syllabus" right={<span className="text-xs text-base-400 tabular-nums pr-1">{learned}/{SUBTOPICS.length}</span>} />
-      <div className="px-4 py-3 space-y-3">
+      <TopBar
+        title={`${d.exam.code} syllabus`}
+        right={
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-base-400 tabular-nums">
+              {learned}/{d.exam.subtopics.length}
+            </span>
+            <ExamSwitch d={d} />
+          </div>
+        }
+      />
+      {!d.exam.ready && <EmptyState icon={BookOpen} title={`${d.exam.name} syllabus not added yet`} description="Its chapters and subtopics will appear here once they're in." />}
+      <div className={d.exam.ready ? 'px-4 py-3 space-y-3' : 'hidden'}>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-base-400" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search subtopics (e.g. materiality, ISA 570)" className="pl-9" />
@@ -40,7 +53,7 @@ export default function Syllabus() {
           </div>
         ) : (
           <div className="space-y-2">
-            {CHAPTERS.map((ch, i) => {
+            {d.exam.chapters.map((ch, i) => {
               const st = stats[i];
               const done = st.learned === st.subtopics;
               return (

@@ -2,7 +2,7 @@ import { db } from './db';
 import { newId, todayStr, addDays } from './id';
 import { schedule, type ScheduleContext } from './srs';
 import type { Card, MockResult, Rating, Settings, StudySession, SubtopicState } from './types';
-import { SECTION_BY_ID, SECTIONS } from '@/data/syllabus';
+import { SECTION_BY_ID, type Exam } from '@/data/syllabus';
 
 export async function setLearned(id: string, learned: boolean): Promise<void> {
   const cur = await db.subtopics.get(id);
@@ -16,12 +16,13 @@ export async function toggleWeak(id: string): Promise<void> {
 
 export async function rateSection(sectionId: string, rating: Rating, settings: Settings): Promise<Card> {
   const today = todayStr();
-  const ctx: ScheduleContext = { today, examDate: settings.examDate, desiredRetention: settings.desiredRetention };
+  const sec = SECTION_BY_ID.get(sectionId)!;
+  const ctx: ScheduleContext = { today, examDate: settings.exams[sec.exam].examDate, desiredRetention: settings.desiredRetention };
   const existing = await db.cards.get(sectionId);
   const res = schedule(existing ?? null, rating, ctx);
-  const sec = SECTION_BY_ID.get(sectionId)!;
   const card: Card = {
     id: sectionId,
+    exam: sec.exam,
     chapter: sec.chapter,
     stability: res.stability,
     difficulty: res.difficulty,
@@ -36,6 +37,7 @@ export async function rateSection(sectionId: string, rating: Rating, settings: S
     await db.reviews.add({
       id: newId(),
       cardId: sectionId,
+      exam: sec.exam,
       chapter: sec.chapter,
       date: today,
       ts: Date.now(),
@@ -72,9 +74,9 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
  * Sections whose subtopics are all learned but which have never been rated. Their first recall is
  * due the day after the last subtopic was learned — a night's sleep makes the first test meaningful.
  */
-export function pendingFirstReviews(states: Map<string, SubtopicState>, cards: Map<string, Card>) {
+export function pendingFirstReviews(exam: Exam, states: Map<string, SubtopicState>, cards: Map<string, Card>) {
   const out: { sectionId: string; due: string }[] = [];
-  for (const sec of SECTIONS) {
+  for (const sec of exam.sections) {
     if (cards.has(sec.id)) continue;
     let last = '';
     let complete = true;

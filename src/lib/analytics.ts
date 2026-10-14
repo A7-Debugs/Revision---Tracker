@@ -1,7 +1,7 @@
-import { CHAPTERS, SECTION_BY_ID, SECTIONS } from '@/data/syllabus';
+import { EXAMS, SECTION_BY_ID } from '@/data/syllabus';
 import { pendingFirstReviews } from './actions';
 import { addDays, daysBetween } from './id';
-import { currentPhase, minutesByDate, pace, recommendLevel, streak, targetMinutes, weekStart, evalWeek, overdueCount, dayHit, isDayOff } from './plan';
+import { currentPhase, minutesByDate, pace, weightedDays, recommendLevel, streak, targetMinutes, weekStart, evalWeek, overdueCount, dayHit, isDayOff } from './plan';
 import { cardRetention, examDayRetention, isMastered } from './srs';
 import type { AppData } from './useData';
 
@@ -16,7 +16,7 @@ export interface QueueItem {
 export function reviewQueue(d: AppData): QueueItem[] {
   const out: QueueItem[] = [];
   for (const c of d.cards) if (c.due <= d.today) out.push({ sectionId: c.id, due: c.due, first: false, retention: cardRetention(c, d.today) });
-  for (const p of pendingFirstReviews(d.stateMap, d.cardMap)) if (p.due <= d.today) out.push({ sectionId: p.sectionId, due: p.due, first: true, retention: null });
+  for (const p of pendingFirstReviews(d.exam, d.stateMap, d.cardMap)) if (p.due <= d.today) out.push({ sectionId: p.sectionId, due: p.due, first: true, retention: null });
   return out.sort((a, b) => {
     if (a.first !== b.first) return a.first ? 1 : -1;
     return (a.retention ?? 1) - (b.retention ?? 1);
@@ -46,11 +46,11 @@ export interface ChapterStat {
 }
 
 export function chapterStats(d: AppData): ChapterStat[] {
-  return CHAPTERS.map((ch) => {
+  return d.exam.chapters.map((ch) => {
     const subs = ch.sections.flatMap((s) => s.subtopics);
     const cards = ch.sections.map((s) => d.cardMap.get(s.id)).filter((c) => !!c);
     const ret = cards.map((c) => cardRetention(c, d.today));
-    const exRet = cards.map((c) => examDayRetention(c, d.settings.examDate));
+    const exRet = cards.map((c) => examDayRetention(c, d.plan.examDate));
     const last = d.reviews.filter((r) => r.chapter === ch.number).at(-1)?.date ?? null;
     const quizzes = d.mocks.filter((m) => m.chapter === ch.number && m.maxScore > 0);
     const learned = subs.filter((t) => d.stateMap.get(t.id)?.learnedAt).length;
@@ -93,7 +93,7 @@ export interface Overview {
 
 export function overview(d: AppData): Overview {
   const byDate = minutesByDate(d.sessions);
-  const p = pace(d.settings, d.states, d.today);
+  const p = pace(d.settings, d.exam, d.states, d.today);
   const ret = d.cards.map((c) => cardRetention(c, d.today));
   const mocks = d.mocks.filter((m) => (m.kind === 'full-mock' || m.kind === 'past-paper') && m.maxScore > 0).slice(-3);
   return {
@@ -101,9 +101,9 @@ export function overview(d: AppData): Overview {
     inReview: d.cards.length,
     mastered: d.cards.filter(isMastered).length,
     memory: ret.length ? mean(ret) : null,
-    readiness: ret.reduce((a, b) => a + b, 0) / SECTIONS.length,
-    examFloor: d.cards.reduce((a, c) => a + examDayRetention(c, d.settings.examDate), 0) / SECTIONS.length,
-    daysLeft: daysBetween(d.today, d.settings.examDate),
+    readiness: ret.reduce((a, b) => a + b, 0) / Math.max(1, d.exam.sections.length),
+    examFloor: d.cards.reduce((a, c) => a + examDayRetention(c, d.plan.examDate), 0) / Math.max(1, d.exam.sections.length),
+    daysLeft: daysBetween(d.today, d.plan.examDate),
     dueToday: reviewQueue(d).length,
     overdue: overdueCount(d.cards, d.today),
     streak: streak(d.settings, byDate, d.today),
@@ -146,7 +146,7 @@ export function heatmap(d: AppData, weeks = 18): HeatCell[][] {
 }
 
 export function reviewForecast(d: AppData, days = 14) {
-  const pending = pendingFirstReviews(d.stateMap, d.cardMap);
+  const pending = pendingFirstReviews(d.exam, d.stateMap, d.cardMap);
   return Array.from({ length: days }, (_, i) => {
     const date = addDays(d.today, i);
     const n =
@@ -203,8 +203,8 @@ export function insights(d: AppData): Insight[] {
   const out: (Insight & { w: number })[] = [];
   const s = d.settings;
   const byDate = minutesByDate(d.sessions);
-  const p = pace(s, d.states, d.today);
-  const phase = currentPhase(s, d.today);
+  const p = pace(s, d.exam, d.states, d.today);
+  const phase = currentPhase(d.plan, d.exam.id, d.today);
   const ov = overview(d);
   const stats = chapterStats(d);
   const daysTracked = daysBetween(s.startedAt, d.today) + 1;
@@ -212,21 +212,36 @@ export function insights(d: AppData): Insight[] {
   // Pace vs. learn-by deadline
   if (phase.newContent && p.remaining > 0) {
     if (p.onTrack === false) {
-      const late = p.projectedFinish ? daysBetween(s.learnBy, p.projectedFinish) : null;
+      const late = p.projectedFinish ? daysBetween(d.plan.learnBy, p.projectedFinish) : null;
       out.push({
         w: 100,
         tone: 'bad',
         title: 'Behind pace for the syllabus',
-        body: `At your recent rate (${round1(p.recentRate)} subtopics/day) you'd finish new content ${late !== null ? `${late} days after` : 'well after'} your ${fmt(s.learnBy)} target. You need ~${round1(p.required)} per work day (double on days off). Level up, or use a day off to catch up.`,
+        body: `At your recent rate (${round1(p.recentRate)} subtopics/day) you'd finish new content ${late !== null ? `${late} days after` : 'well after'} your ${fmt(d.plan.learnBy)} target. You need ~${round1(p.required)} per work day (double on days off). Level up, or use a day off to catch up.`,
       });
     } else if (p.onTrack) {
       out.push({
         w: 30,
         tone: 'good',
         title: 'On pace to finish the syllabus',
-        body: `Projected to finish new content by ${fmt(p.projectedFinish!)} — ahead of your ${fmt(s.learnBy)} target, leaving time for question practice.`,
+        body: `Projected to finish new content by ${fmt(p.projectedFinish!)} — ahead of your ${fmt(d.plan.learnBy)} target, leaving time for question practice.`,
       });
     }
+  }
+
+  // Later exams: warn early if their learning window is too short for their syllabus.
+  for (const later of EXAMS.filter((e) => e.ready && s.exams[e.id].examDate > d.plan.examDate)) {
+    const lp = s.exams[later.id];
+    const lpace = pace(s, later, d.allStates, d.today);
+    const days = weightedDays(s, lp.startFrom > d.today ? lp.startFrom : d.today, lp.learnBy);
+    const perDay = days > 0 ? lpace.remaining / days : lpace.remaining;
+    if (lpace.remaining > 0 && perDay > 5)
+      out.push({
+        w: phase.id === 'learn' ? 40 : 68,
+        tone: 'warn',
+        title: `${later.name} window is tight`,
+        body: `${lpace.remaining} ${later.code} subtopics between ${fmt(lp.startFrom)} and ${fmt(lp.learnBy)} is ~${round1(perDay)} per work day. Reading ahead one ${later.code} chapter a week now (e.g. on a day off) would bring that down. Adjust dates in Me → Settings.`,
+      });
   }
 
   // Overdue backlog
@@ -259,7 +274,7 @@ export function insights(d: AppData): Insight[] {
       w: 75,
       tone: 'warn',
       title: `${leeches.length} section${leeches.length > 1 ? 's keep' : ' keeps'} slipping`,
-      body: `${leeches.slice(0, 3).map((c) => `${c.id} ${SECTION_BY_ID.get(c.id)?.title}`).join(', ')} — forgotten 3+ times. Re-reading won't fix this; make your own summary or mnemonic, then test yourself with a question.`,
+      body: `${leeches.slice(0, 3).map((c) => `${SECTION_BY_ID.get(c.id)?.code} ${SECTION_BY_ID.get(c.id)?.title}`).join(', ')} — forgotten 3+ times. Re-reading won't fix this; make your own summary or mnemonic, then test yourself with a question.`,
     });
 
   // Neglected learned chapters
@@ -308,7 +323,7 @@ export function insights(d: AppData): Insight[] {
 
   // Mocks
   const mocks = d.mocks.filter((m) => (m.kind === 'full-mock' || m.kind === 'past-paper') && m.maxScore > 0);
-  const left = daysBetween(d.today, s.examDate);
+  const left = daysBetween(d.today, d.plan.examDate);
   if (left <= 42 && mocks.length === 0)
     out.push({ w: 85, tone: 'bad', title: 'No full mock yet', body: `${left} days to go. Sit a timed 3-hour mock this week — exam technique and time management are worth as many marks as knowledge.` });
   if (ov.mockAvg !== null)
