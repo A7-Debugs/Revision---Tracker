@@ -9,11 +9,12 @@ import { StudyTimer } from '@/components/study/StudyTimer';
 import { InsightRow } from '@/components/study/InsightRow';
 import { ExamSwitch } from '@/components/study/ExamSwitch';
 import { ExamTimeline } from '@/components/study/ExamTimeline';
-import { useData } from '@/lib/useData';
+import { ReadAheadCard } from '@/components/study/ReadAheadCard';
+import { examSlice, useData } from '@/lib/useData';
 import { setLearned } from '@/lib/actions';
-import { currentPhase, effectiveLevel, isDayOff, levelDef, minutesByDate, nextSubtopics, pace, targetMinutes } from '@/lib/plan';
-import { fmt, insights, overview, reviewQueue, reviewsDoneToday, round1 } from '@/lib/analytics';
-import { examOf, hubUrl, SECTION_BY_ID, SUBTOPIC_BY_ID } from '@/data/syllabus';
+import { currentPhase, effectiveLevel, isDayOff, levelDef, minutesByDate, nextSubtopics, pace, readAhead, targetMinutes } from '@/lib/plan';
+import { fmt, insights, overview, queueFor, reviewQueue, reviewsDoneToday, round1 } from '@/lib/analytics';
+import { EXAMS, examOf, hubUrl, SECTION_BY_ID, SUBTOPIC_BY_ID } from '@/data/syllabus';
 import { cn } from '@/lib/cn';
 
 export default function Today() {
@@ -34,6 +35,14 @@ export default function Today() {
   const todaysLearned = d.exam.subtopics.filter((t) => d.stateMap.get(t.id)?.learnedAt === d.today).map((t) => t.id);
   const toLearn = nextSubtopics(d.exam, d.states, Math.max(0, p.quotaToday - p.learnedToday));
   const tips = insights(d).slice(0, 2);
+  const readAheads = EXAMS.map((e) => readAhead(s, e, d.allStates, d.today)).filter((r) => r !== null);
+  // Reviews waiting in other exams you haven't sat yet (e.g. read-ahead sections).
+  const otherDue = EXAMS.filter((e) => e.id !== d.exam.id && s.exams[e.id].examDate >= d.today)
+    .map((e) => {
+      const sl = examSlice(d, e.id);
+      return { exam: e, n: queueFor(e, sl.stateMap, sl.cardMap, d.today).length };
+    })
+    .filter((x) => x.n > 0);
 
   const learn = async (id: string, code: string) => {
     await setLearned(id, true);
@@ -115,6 +124,18 @@ export default function Today() {
               </Button>
             )}
           </div>
+          {otherDue.map((o) => (
+            <button
+              key={o.exam.id}
+              onClick={() => navigate(`/review/session?exam=${o.exam.id}`)}
+              className="mt-3 w-full flex items-center justify-between rounded-lg bg-base-850 border border-base-800 px-3 py-2 text-xs text-base-300"
+            >
+              <span>
+                Also due: {o.n} {o.exam.code} review{o.n > 1 ? 's' : ''} (~{o.n * 3} min)
+              </span>
+              <ArrowRight size={13} />
+            </button>
+          ))}
         </CardContent>
       </Card>
 
@@ -160,6 +181,10 @@ export default function Today() {
           </CardContent>
         </Card>
       )}
+
+      {readAheads.map((ra) => (
+        <ReadAheadCard key={ra.exam.id} ra={ra} />
+      ))}
 
       {tips.length > 0 && (
         <div>

@@ -4,7 +4,7 @@ import { db } from './db';
 import { todayStr } from './id';
 import { activeExam } from './plan';
 import type { Card, ExamPlan, MockResult, ReviewLog, Settings, StudySession, SubtopicState } from './types';
-import { examOf, type Exam } from '@/data/syllabus';
+import { examOf, SECTION_BY_ID, type Exam, type ExamId } from '@/data/syllabus';
 
 export interface AppData {
   today: string;
@@ -38,7 +38,8 @@ export function useData(): AppData | undefined {
     const examId = settings.focus === 'auto' ? activeExam(settings, today) : settings.focus;
     const prefix = `${examId}:`;
     const examStates = states.filter((s) => s.id.startsWith(prefix));
-    const examCards = cards.filter((c) => c.exam === examId);
+    // Ignore cards for sections that no longer exist (e.g. a placeholder replaced by real subtopics).
+    const examCards = cards.filter((c) => c.exam === examId && SECTION_BY_ID.has(c.id));
     return {
       today,
       settings,
@@ -55,4 +56,12 @@ export function useData(): AppData | undefined {
       allStates: states,
     };
   }, [settings, states, cards, reviews, sessions, mocks]);
+}
+
+/** States and cards for any exam, not just the one in focus. */
+export function examSlice(d: AppData, examId: ExamId) {
+  const prefix = `${examId}:`;
+  const states = d.allStates.filter((s) => s.id.startsWith(prefix));
+  const cards = d.allCards.filter((c) => c.exam === examId && SECTION_BY_ID.has(c.id));
+  return { states, stateMap: new Map(states.map((s) => [s.id, s])), cards, cardMap: new Map(cards.map((c) => [c.id, c])) };
 }

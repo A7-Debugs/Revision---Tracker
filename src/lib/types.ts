@@ -80,6 +80,8 @@ export interface ExamPlan {
   examDate: string;
   learnBy: string; // date by which all new content should be covered
   startFrom: string; // when new-content quotas begin for this exam
+  /** Optional light read-ahead of foundation chapters on days off, before the main start. */
+  preview?: { from: string; to: string; chapters: number[]; perDayOff: number; enabled: boolean };
 }
 
 export interface Settings {

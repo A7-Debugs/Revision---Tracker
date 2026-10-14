@@ -1,4 +1,5 @@
-import { EXAMS, SECTION_BY_ID } from '@/data/syllabus';
+import { EXAMS, SECTION_BY_ID, type Exam } from '@/data/syllabus';
+import type { Card, SubtopicState } from './types';
 import { pendingFirstReviews } from './actions';
 import { addDays, daysBetween } from './id';
 import { currentPhase, minutesByDate, pace, weightedDays, recommendLevel, streak, targetMinutes, weekStart, evalWeek, overdueCount, dayHit, isDayOff } from './plan';
@@ -14,9 +15,14 @@ export interface QueueItem {
 
 /** Everything due today: overdue first, then lowest predicted recall. First-time recalls go last. */
 export function reviewQueue(d: AppData): QueueItem[] {
+  return queueFor(d.exam, d.stateMap, d.cardMap, d.today);
+}
+
+/** Due queue for any exam, given its states and cards. */
+export function queueFor(exam: Exam, stateMap: Map<string, SubtopicState>, cardMap: Map<string, Card>, today: string): QueueItem[] {
   const out: QueueItem[] = [];
-  for (const c of d.cards) if (c.due <= d.today) out.push({ sectionId: c.id, due: c.due, first: false, retention: cardRetention(c, d.today) });
-  for (const p of pendingFirstReviews(d.exam, d.stateMap, d.cardMap)) if (p.due <= d.today) out.push({ sectionId: p.sectionId, due: p.due, first: true, retention: null });
+  for (const c of cardMap.values()) if (c.due <= today) out.push({ sectionId: c.id, due: c.due, first: false, retention: cardRetention(c, today) });
+  for (const p of pendingFirstReviews(exam, stateMap, cardMap)) if (p.due <= today) out.push({ sectionId: p.sectionId, due: p.due, first: true, retention: null });
   return out.sort((a, b) => {
     if (a.first !== b.first) return a.first ? 1 : -1;
     return (a.retention ?? 1) - (b.retention ?? 1);

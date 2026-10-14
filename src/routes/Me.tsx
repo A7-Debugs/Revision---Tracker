@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Dialog } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toaster';
 import { SectionTitle } from '@/components/viz/Visuals';
 import { useData, type AppData } from '@/lib/useData';
@@ -295,6 +296,17 @@ function SettingsCard({ d }: { d: AppData }) {
               <p className="text-[11px] text-base-500">
                 New content {fmt(plan.startFrom)} → {fmt(plan.learnBy)}, then question practice and mocks until the exam on {fmt(plan.examDate)}.
               </p>
+              {plan.preview && (
+                <div className="flex items-center gap-3 rounded-xl bg-base-850 border border-base-800 px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-base-100">Read-ahead Ch {plan.preview.chapters.join('–')}</p>
+                    <p className="text-[11px] text-base-400">
+                      {plan.preview.perDayOff}/day off, {fmt(plan.preview.from)} → {fmt(plan.preview.to)}, only while the earlier exam is on pace
+                    </p>
+                  </div>
+                  <Switch checked={plan.preview.enabled} onCheckedChange={(v) => set({ preview: { ...plan.preview!, enabled: v } })} />
+                </div>
+              )}
             </div>
           );
         })}

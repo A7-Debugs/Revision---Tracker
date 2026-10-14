@@ -26,6 +26,32 @@ app with its own data.
 
 Data lives only on your device. Use **Me → Backup** regularly.
 
+## Two-exam plan (defaults, editable in Me → Settings)
+
+| When | AA | TX |
+|---|---|---|
+| 14 Oct → 30 Nov | Learn (~3.5 subtopics / work day, double on days off) | — |
+| 1 Dec → 31 Jan | Learn, finish by 31 Jan | Optional read-ahead of Ch 1–2 on days off (2 per day off), only once AA's quota for the day is done and AA is on pace |
+| 1 Feb → exam (~1 Mar) | Revision, question practice, mocks (L4 → L5) | Read-ahead reviews only (a few minutes a week) |
+| 2 days after AA | Rest | Rest |
+| 4 Mar → 2 May | — | Learn (~4.3 subtopics / work day, Level 4 floor) |
+| 3 May → 16 May | — | Question practice, reviews first |
+| 17 May → exam (~7 Jun) | — | Timed mocks, weakest chapters, Level 5 |
+
+Why it's set up this way:
+- **Spacing**: memory lasts far longer when study of the same material is spread out and revisited than when it's
+  crammed (the spacing effect; Cepeda et al., 2006). TX Ch 2's income tax computation is the core that later
+  chapters build on, so learning it early and reviewing it lightly for six months gives the most durable foundation
+  for the least time.
+- **Retrieval practice**: testing yourself beats re-reading (Roediger & Karpicke, 2006; Dunlosky et al., 2013 rate
+  practice testing and distributed practice as the two highest-utility techniques). Every review is a self-test;
+  TX reviews are "work a question", not "describe it", because TX marks come from computations.
+- **Protect AA's final month**: no new TX material from February. The final weeks of retrieval practice and mocks
+  carry the most marks, and splitting attention then costs more than it gains.
+- **Read-ahead is small and gated**: it only appears on days off and only after the day's AA quota, so it can never
+  take time from AA.
+- **5 weeks of TX practice before June**: TX learning ends 2 May so question practice and mocks get a full five weeks.
+
 ## Develop
 
 ```bash

@@ -49,9 +49,9 @@ export default function ChapterDetail() {
             ))}
           </div>
         )}
-        {d.exam.id === 'aa' && ch.number === 1 && ch.sections.length === 1 && (
+        {ch.sections.length === 1 && ch.sections[0].title === 'Whole chapter' && (
           <p className="text-xs text-base-400 leading-relaxed">
-            Chapter 1's subtopics weren't in the list, so it's tracked as a single item for now. Send them over and they'll be split out like the others.
+            This chapter's subtopics haven't been added yet, so it's tracked as a single item for now.
           </p>
         )}
 

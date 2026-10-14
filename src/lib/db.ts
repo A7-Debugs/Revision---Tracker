@@ -1,6 +1,15 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { Card, MockResult, ReviewLog, Settings, StudySession, SubtopicState } from './types';
-import { addDays, todayStr } from './id';
+import { todayStr } from './id';
+import { AA_EXAM_DEFAULT, defaultTxPlan } from './defaults';
+
+/** Slugs of AA Chapter 1's real subtopics — they replaced a single "whole chapter" placeholder in v3. */
+const AA_CH1_SUBTOPICS = [
+  '111-external-audit', '112-internal-audit', '113-assurance-services', '120-introduction', '121-an-assurance-engagement',
+  '122-stewardship-agency-and-accountability', '123-auditors-report', '124-the-audit-process',
+  '131-international-framework-for-assurance-engagements', '132-five-elements-of-an-assurance-engagement',
+  '133-types-of-assurance-engagement', '134-evidence-gathering-procedures-and-reports', '135-review-engagements',
+];
 
 class RevisionDB extends Dexie {
   subtopics!: EntityTable<SubtopicState, 'id'>;
@@ -49,34 +58,43 @@ class RevisionDB extends Dexie {
         });
         await tx.table('settings').toCollection().modify((s) => {
           if (s.exams) return;
+          // v2 shipped TX as: start the day after AA, learn by 9 May, no read-ahead. v3 replaces it below.
           s.exams = {
             aa: { examDate: s.examDate, learnBy: s.learnBy, startFrom: s.startedAt },
-            tx: defaultTx(s.examDate),
+            tx: { examDate: '2027-06-07', learnBy: '2027-05-09', startFrom: s.examDate },
           };
           s.focus = 'auto';
           delete s.examDate;
           delete s.learnBy;
         });
       });
+    // v3: AA Chapter 1 split from one placeholder into its real subtopics; Taxation plan gains a read-ahead.
+    this.version(3).upgrade(async (tx) => {
+      const placeholder = await tx.table('subtopics').get('aa:chapter-1-visual-overview');
+      if (placeholder?.learnedAt) {
+        await tx.table('subtopics').bulkPut(AA_CH1_SUBTOPICS.map((slug) => ({ id: `aa:${slug}`, learnedAt: placeholder.learnedAt, weak: false })));
+      }
+      await tx.table('subtopics').delete('aa:chapter-1-visual-overview');
+      await tx.table('cards').delete('aa:1.0');
+      await tx.table('settings').toCollection().modify((s) => {
+        const t = s.exams?.tx;
+        // Only replace the untouched v2 default — never dates you've edited.
+        if (t && t.learnBy === '2027-05-09' && t.examDate === '2027-06-07' && !t.preview) s.exams.tx = defaultTxPlan(s.exams.aa.examDate);
+      });
+    });
   }
 }
 
 export const db = new RevisionDB();
 
-/** Taxation starts the day after AA. ACCA's June 2027 session is early June — edit in Settings once booked. */
-function defaultTx(aaExamDate: string) {
-  return { examDate: '2027-06-07', learnBy: '2027-05-09', startFrom: addDays(aaExamDate, 1) };
-}
-
 export async function ensureSettings(): Promise<void> {
   if (await db.settings.get('main')) return;
   const today = todayStr();
-  const aaExam = '2027-03-01'; // ACCA's March 2027 session starts the first week of March
   await db.settings.put({
     id: 'main',
     exams: {
-      aa: { examDate: aaExam, learnBy: '2027-01-31', startFrom: today },
-      tx: defaultTx(aaExam),
+      aa: { examDate: AA_EXAM_DEFAULT, learnBy: '2027-01-31', startFrom: today },
+      tx: defaultTxPlan(AA_EXAM_DEFAULT),
     },
     focus: 'auto',
     daysOff: [0, 6],

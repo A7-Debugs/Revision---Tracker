@@ -4,12 +4,12 @@ import { Eye, ExternalLink, Flag, PartyPopper, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toaster';
-import { useData, type AppData } from '@/lib/useData';
+import { examSlice, useData, type AppData } from '@/lib/useData';
 import { rateSection, toggleWeak } from '@/lib/actions';
-import { reviewQueue, pct } from '@/lib/analytics';
+import { queueFor, pct } from '@/lib/analytics';
 import { cardRetention, formatInterval, previewIntervals, RATING_HINT, RATING_LABEL } from '@/lib/srs';
 import type { Rating } from '@/lib/types';
-import { examOf, hubUrl, SECTION_BY_ID } from '@/data/syllabus';
+import { examOf, hubUrl, SECTION_BY_ID, type ExamId } from '@/data/syllabus';
 import { cn } from '@/lib/cn';
 
 export default function ReviewSession() {
@@ -32,7 +32,10 @@ function Session({ d }: { d: AppData }) {
   // Snapshot the queue once so ratings don't reshuffle it mid-session.
   const [ids] = useState<string[]>(() => {
     const one = params.get('section');
-    return one ? [one] : reviewQueue(d).map((q) => q.sectionId);
+    if (one) return [one];
+    const examId = (params.get('exam') as ExamId | null) ?? d.exam.id;
+    const sl = examSlice(d, examId);
+    return queueFor(examOf(examId), sl.stateMap, sl.cardMap, d.today).map((q) => q.sectionId);
   });
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
@@ -66,6 +69,7 @@ function Session({ d }: { d: AppData }) {
   const ctx = { today: d.today, examDate: d.settings.exams[sec.exam].examDate, desiredRetention: d.settings.desiredRetention };
   const preview = previewIntervals(card, ctx);
   const quiz = ch.resources.find((r) => r.label.startsWith('Summary'));
+  const practice = exam.reviewMode === 'practice';
 
   const rate = async (g: Rating) => {
     if (busy) return;
@@ -113,7 +117,7 @@ function Session({ d }: { d: AppData }) {
         </div>
 
         <div className="rounded-2xl bg-base-900 border border-base-800 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-base-500 mb-2">{revealed ? 'Check each point' : 'Recall everything you can about…'}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-base-500 mb-2">{revealed ? 'Check each point' : practice ? 'Work it from memory…' : 'Recall everything you can about…'}</p>
           <div className="space-y-1">
             {sec.subtopics.map((t) => {
               const weak = d.allStates.find((x) => x.id === t.id)?.weak;
@@ -141,12 +145,14 @@ function Session({ d }: { d: AppData }) {
           </div>
           {!revealed && (
             <p className="text-xs text-base-400 mt-3 leading-relaxed">
-              Write it down or say it out loud: definitions, the ISA, who's responsible, typical procedures, an example. Aim for 2–4 minutes before checking.
+              {practice
+                ? 'Without notes, write out the pro-forma / rules for this section, then work one short question on it (Study Hub quiz or a practice-kit question). Marks in this exam come from doing the computation, so describing it isn\'t enough.'
+                : "Write it down or say it out loud: definitions, the ISA, who's responsible, typical procedures, an example. Aim for 2–4 minutes before checking."}
             </p>
           )}
         </div>
 
-        {revealed && quiz && (
+        {(revealed || practice) && quiz && (
           <a href={quiz.url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl bg-base-850 border border-base-700 px-3 py-2.5 text-sm text-base-200">
             Chapter {ch.number} flashcards & quiz on Study Hub <ExternalLink size={14} />
           </a>
@@ -157,7 +163,7 @@ function Session({ d }: { d: AppData }) {
         <div className="mx-auto max-w-lg px-4 py-3">
           {!revealed ? (
             <Button size="lg" className="w-full" onClick={() => setRevealed(true)}>
-              <Eye size={18} /> I've recalled it — check
+              <Eye size={18} /> {practice ? "I've worked it — check" : "I've recalled it — check"}
             </Button>
           ) : (
             <div className="grid grid-cols-4 gap-2">

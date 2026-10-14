@@ -4,8 +4,22 @@
  */
 export const AA_RAW = `
 C|1|Audit and Other Assurance Engagements
-S|1.0|Whole chapter
-chapter-1-visual-overview|1.0 Audit and Other Assurance Engagements
+S|1.1|Development
+111-external-audit|1.1.1 External Audit
+112-internal-audit|1.1.2 Internal Audit
+113-assurance-services|1.1.3 Assurance Services
+S|1.2|External Audit
+120-introduction|1.2.0 Introduction
+121-an-assurance-engagement|1.2.1 An Assurance Engagement
+122-stewardship-agency-and-accountability|1.2.2 Stewardship, Agency and Accountability
+123-auditors-report|1.2.3 Auditor's Report
+124-the-audit-process|1.2.4 The Audit Process
+S|1.3|Assurance Engagements
+131-international-framework-for-assurance-engagements|1.3.1 International Framework for Assurance Engagements
+132-five-elements-of-an-assurance-engagement|1.3.2 Five Elements of an Assurance Engagement
+133-types-of-assurance-engagement|1.3.3 Types of Assurance Engagement
+134-evidence-gathering-procedures-and-reports|1.3.4 Evidence Gathering Procedures and Reports
+135-review-engagements|1.3.5 Review Engagements
 
 C|2|External Audit
 S|2.1|Regulation

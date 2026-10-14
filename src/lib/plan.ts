@@ -1,6 +1,6 @@
 import type { Card, ExamPlan, Level, Settings, StudySession, SubtopicState } from './types';
 import { addDays, daysBetween, weekday } from './id';
-import { EXAMS, type Exam, type ExamId } from '@/data/syllabus';
+import { EXAMS, type Exam, type ExamId, type Subtopic } from '@/data/syllabus';
 
 // ---------------------------------------------------------------------------------------------
 // Levels — daily study volume. You start low, prove consistency, then level up (same idea as the
@@ -58,6 +58,14 @@ export function currentPhase(plan: ExamPlan, exam: ExamId, today: string): Phase
     return { id: 'final', name: 'Final revision', focus: 'Full timed mocks, every due review, weakest chapters first. No new content.', floor: 5, newContent: false };
   if (today > plan.learnBy)
     return { id: 'revise', name: 'Revision & practice', focus: 'Finish any stragglers, then question practice and exam-style scenarios. Reviews come first.', floor: 4, newContent: true };
+  if (today < plan.startFrom && plan.preview?.enabled && today >= plan.preview.from && today <= plan.preview.to)
+    return {
+      id: 'upcoming',
+      name: 'Read-ahead',
+      focus: `Light read-ahead of Ch ${plan.preview.chapters.join('–')} on days off while the earlier exam is on pace. Full start ${new Date(`${plan.startFrom}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}.`,
+      floor: 1,
+      newContent: false,
+    };
   if (today < plan.startFrom)
     return { id: 'upcoming', name: 'Not started', focus: `Starts ${new Date(`${plan.startFrom}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}. You can read ahead any time, but the main focus is the exam before it.`, floor: 1, newContent: false };
   return { id: 'learn', name: 'Learn the syllabus', focus: 'Work through new subtopics in order. Do due reviews before new material.', floor: LEARN_FLOOR[exam], newContent: true };
@@ -268,4 +276,39 @@ export function weightedDays(s: Settings, from: string, to: string): number {
   let n = 0;
   for (let d = from; d <= to; d = addDays(d, 1)) n += dayWeight(s, d);
   return n;
+}
+
+export interface ReadAhead {
+  exam: Exam;
+  /** Subtopics to read today (empty when today isn't a read-ahead day). */
+  list: Subtopic[];
+  doneToday: Subtopic[];
+  quota: number;
+  remaining: number;
+  /** Why there's nothing today, if so. */
+  blocked: string | null;
+}
+
+/**
+ * Read-ahead for a later exam: a small quota of foundation subtopics on days off, inside the preview window,
+ * and only while the exam you're currently working towards is on pace — the earlier exam always comes first.
+ */
+export function readAhead(s: Settings, exam: Exam, allStates: SubtopicState[], today: string): ReadAhead | null {
+  const plan = s.exams[exam.id];
+  const pv = plan.preview;
+  if (!pv?.enabled || today < pv.from || today > pv.to || today >= plan.startFrom || !exam.ready) return null;
+  const learned = new Map(allStates.filter((x) => x.learnedAt).map((x) => [x.id, x.learnedAt!]));
+  const pool = exam.subtopics.filter((t) => pv.chapters.includes(t.chapter));
+  const doneToday = pool.filter((t) => learned.get(t.id) === today);
+  const left = pool.filter((t) => !learned.has(t.id));
+  const base = { exam, doneToday, quota: pv.perDayOff, remaining: left.length };
+  if (left.length === 0 && doneToday.length === 0) return null;
+  if (!isDayOff(s, today)) return { ...base, list: [], blocked: 'Read-ahead happens on days off only.' };
+  const current = EXAMS.find((e) => e.id === activeExam(s, today))!;
+  if (current.id !== exam.id) {
+    const p = pace(s, current, allStates, today);
+    if (p.onTrack === false || p.learnedToday < p.quotaToday)
+      return { ...base, list: [], blocked: `${current.code} first: ${p.onTrack === false ? `catch up on ${current.code} pace` : `finish today's ${current.code} quota`} to unlock read-ahead.` };
+  }
+  return { ...base, list: left.slice(0, Math.max(0, pv.perDayOff - doneToday.length)), blocked: null };
 }

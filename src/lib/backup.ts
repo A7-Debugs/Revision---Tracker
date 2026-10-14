@@ -1,5 +1,6 @@
 import { db } from './db';
-import { addDays, todayStr } from './id';
+import { todayStr } from './id';
+import { defaultTxPlan } from './defaults';
 
 const TABLES = ['subtopics', 'cards', 'reviews', 'sessions', 'mocks', 'settings'] as const;
 
@@ -48,7 +49,7 @@ function upgradeV1(data: Record<string, any[]>) {
     focus: 'auto',
     exams: {
       aa: { examDate, learnBy, startFrom: s.startedAt },
-      tx: { examDate: '2027-06-07', learnBy: '2027-05-09', startFrom: addDays(examDate, 1) },
+      tx: defaultTxPlan(examDate),
     },
   }));
 }
